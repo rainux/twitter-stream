@@ -20,6 +20,8 @@ module Twitter
     RECONNECT_MAX   = 320
     RETRIES_MAX     = 10
 
+    NO_DATA_TIMEOUT = 90
+
     DEFAULT_OPTIONS = {
       :method         => 'GET',
       :path           => '/',
@@ -73,6 +75,7 @@ module Twitter
       @immediate_reconnect = false
       @on_inited_callback = options.delete(:on_inited)
       @proxy = URI.parse(options[:proxy]) if options[:proxy]
+      @last_data_received_at = nil
     end
 
     def each_item &block
@@ -85,6 +88,10 @@ module Twitter
 
     def on_reconnect &block
       @reconnect_callback = block
+    end
+
+    def on_no_data &block
+      @no_data_callback = block
     end
 
     def on_max_reconnects &block
@@ -118,6 +125,7 @@ module Twitter
     # Receives raw data from the HTTP connection and pushes it into the
     # HTTP parser which then drives subsequent callbacks.
     def receive_data(data)
+      @last_data_received_at = Time.now
       @parser << data
     end
 
@@ -128,6 +136,17 @@ module Twitter
     def post_init
       reset_state
       @on_inited_callback.call if @on_inited_callback
+      @reconnect_timer = EventMachine.add_periodic_timer(5) do
+        if @gracefully_closed
+          @reconnect_timer.cancel
+
+        elsif @last_data_received_at && Time.now - @last_data_received_at > NO_DATA_TIMEOUT
+          # Should use #reconnect but it will cause #unbind be called immediately, see http://goo.gl/LfpnG
+          # So we provide a no_data callback temporarily.
+          # reconnect @options[:host], @options[:port]
+          @no_data_callback.call if @no_data_callback
+        end
+      end
     end
 
   protected
