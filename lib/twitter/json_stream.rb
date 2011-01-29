@@ -98,6 +98,14 @@ module Twitter
       @max_reconnects_callback = block
     end
 
+    def on_unauthorized &block
+      @unauthorized_callback = block
+    end
+
+    def on_too_often &block
+      @too_often_callback = block
+    end
+
     def on_close &block
       @close_callback = block
     end
@@ -212,11 +220,17 @@ module Twitter
     # stream.
     def handle_headers_complete(headers)
       @code = @parser.status_code.to_i
-      if @code != 200
+      case @code
+      when 200
+        self.headers = headers
+        @state = :stream
+      when 401
+        @unauthorized_callback.call if @unauthorized_callback
+      when 420
+        @too_often_callback.call if @too_often_callback
+      else
         receive_error("invalid status code: #{@code}.")
       end
-      self.headers = headers
-      @state = :stream
     end
 
     # Called every time a chunk of data is read from the connection once it has
