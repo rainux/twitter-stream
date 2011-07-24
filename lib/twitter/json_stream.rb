@@ -230,6 +230,7 @@ module Twitter
         @too_often_callback.call if @too_often_callback
       else
         receive_error("invalid status code: #{@code}.")
+        stop
       end
     end
 
